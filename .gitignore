@@ -22,3 +22,4 @@ build/
 release-record.json
 staging-record.json
 rollback-record.json
+build-record.json
