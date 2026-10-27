@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pipeline-demo-api"
+version = "0.1.0"
+description = "A deliberately small API for a secure, traceable delivery pipeline."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+authors = [{name = "Giovanny Alvarado Barrantes", email = "gioab0411@gmail.com"}]
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.8,<3",
+  "uvicorn>=0.34,<1",
+]
+
+[dependency-groups]
+dev = [
+  "build>=1.2,<2",
+  "httpx>=0.28,<1",
+  "httpx2>=2,<3",
+  "mypy>=1.16,<2",
+  "pip-audit>=2.9,<3",
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "pyyaml>=6,<7",
+  "ruff>=0.12,<1",
+  "types-pyyaml>=6,<7",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pipeline_demo_api"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "scripts", "tests"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra"
+markers = ["unit: isolated behavior", "integration: application lifecycle and HTTP behavior"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["pipeline_demo_api"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true

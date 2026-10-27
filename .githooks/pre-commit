@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+expected='Giovanny Alvarado Barrantes <gioab0411@gmail.com>'
+for role in AUTHOR COMMITTER; do
+  actual=$(git var "GIT_${role}_IDENT")
+  case "$actual" in
+    "$expected"\ *) ;;
+    *) echo "Commit rejected: incorrect $role identity." >&2; exit 1 ;;
+  esac
+done
+git diff --cached --check
