@@ -51,6 +51,7 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "--strict-markers --strict-config -ra"
 markers = ["unit: isolated behavior", "integration: application lifecycle and HTTP behavior"]
 filterwarnings = ["error"]
