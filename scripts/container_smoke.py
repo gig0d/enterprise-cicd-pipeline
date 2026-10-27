@@ -44,7 +44,7 @@ def exercise(
     network_created = False
     started = False
     try:
-        docker("network", "create", "--internal", name)
+        docker("network", "create", name)
         network_created = True
         command = [
             "run",
@@ -78,7 +78,10 @@ def exercise(
             raise ValueError("Container is not configured with the expected non-root user.")
         if config["Labels"].get("org.opencontainers.image.revision") != revision:
             raise ValueError("Image revision label does not match the expected source revision.")
-        address = inspected["NetworkSettings"]["Ports"]["8000/tcp"][0]
+        mappings = inspected["NetworkSettings"]["Ports"].get("8000/tcp")
+        if not mappings:
+            raise ValueError("Docker did not publish the expected loopback HTTP port.")
+        address = mappings[0]
         if address["HostIp"] != "127.0.0.1":
             raise ValueError("Container port must be published only on loopback.")
         metadata = verify(f"http://127.0.0.1:{address['HostPort']}", revision, environment, timeout)
