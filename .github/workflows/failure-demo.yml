@@ -1,0 +1,66 @@
+name: Controlled gate failure demonstration
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Intentionally fail a gate; this workflow is expected to be red
+        required: true
+        type: choice
+        options: [quality, security]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Intentionally failing gate
+    if: github.ref == 'refs/heads/main' && github.actor == 'gig0d'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip install --require-hashes -r .github/requirements-bootstrap.txt
+          uv sync --locked
+      - name: Execute the isolated synthetic failure
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+        run: uv run python -m scripts.failure_fixture "$SCENARIO"
+  build:
+    name: Build blocked by the failed gate
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build -t pipeline-demo-api:failure-demo .
+  observe:
+    name: Record actual blocking behavior
+    if: always()
+    needs: [gate, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require a failed gate and skipped build
+        env:
+          GATE: ${{ needs.gate.result }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          test "$GATE" = failure
+          test "$BUILD" = skipped
+          mkdir -p reports
+          printf '{"gate":"%s","build":"%s","expected_failure":true}\n' "$GATE" "$BUILD" > reports/failure-demo.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: failure-demonstration-evidence
+          path: reports/
+          if-no-files-found: error
+          retention-days: 30

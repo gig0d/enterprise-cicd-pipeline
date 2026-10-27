@@ -1,0 +1,193 @@
+name: Controlled release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful main CI run containing build-record and staging-record
+        type: string
+        required: true
+      digest:
+        description: Exact validated image digest (sha256 plus 64 lowercase hex digits)
+        type: string
+        required: true
+      version:
+        description: Stable semantic release identifier matching the application (v0.1.0)
+        type: string
+        required: true
+      publish_tag:
+        description: Explicitly authorize attaching the semantic GHCR tag after simulation
+        type: boolean
+        default: false
+      create_draft:
+        description: Explicitly authorize a GitHub draft release; an owner-created Git tag must already exist
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Verify release authorization and evidence
+    if: >-
+      github.repository == 'gig0d/enterprise-cicd-pipeline' &&
+      github.ref == 'refs/heads/main' && github.actor == 'gig0d' &&
+      github.triggering_actor == 'gig0d'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip install --require-hashes -r .github/requirements-bootstrap.txt
+          uv sync --locked
+      - name: Verify successful CI, artifact checksums, and staging identity
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_RUN: ${{ inputs.ci_run_id }}
+          DIGEST: ${{ inputs.digest }}
+          VERSION: ${{ inputs.version }}
+        run: uv run python -m scripts.verify_candidate --run-id "$CI_RUN" --digest "$DIGEST" --version "$VERSION"
+      - name: Require authorized registry publication for semantic tagging
+        env:
+          PUBLISH_TAG: ${{ inputs.publish_tag }}
+          ENABLED: ${{ vars.ENABLE_GHCR_PUBLISH }}
+        run: |
+          if [ "$PUBLISH_TAG" = true ] && [ "$ENABLED" != true ]; then
+            echo 'Registry publication has not been enabled by the owner.' >&2
+            exit 1
+          fi
+
+  simulate:
+    name: Production release simulation
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip install --require-hashes -r .github/requirements-bootstrap.txt
+          uv sync --locked
+          python -m scripts.install_tool trivy
+      - name: Recheck evidence after any approval wait
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_RUN: ${{ inputs.ci_run_id }}
+          DIGEST: ${{ inputs.digest }}
+          VERSION: ${{ inputs.version }}
+        run: uv run python -m scripts.verify_candidate --run-id "$CI_RUN" --digest "$DIGEST" --version "$VERSION"
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rescan and simulate the exact candidate
+        env:
+          DIGEST: ${{ inputs.digest }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          IMAGE="ghcr.io/gig0d/enterprise-cicd-pipeline@$DIGEST"
+          docker pull "$IMAGE"
+          .tools/trivy/trivy image --scanners vuln --format json --output reports/release-trivy.json --timeout 5m "$IMAGE"
+          uv run python -m scripts.release --version "$VERSION"
+      - name: Preserve release record and diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-evidence
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 90
+
+  tag:
+    name: Approve semantic image promotion
+    needs: simulate
+    if: inputs.publish_tag && vars.ENABLE_GHCR_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip install --require-hashes -r .github/requirements-bootstrap.txt
+          uv sync --locked
+      - name: Revalidate the candidate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_RUN: ${{ inputs.ci_run_id }}
+          DIGEST: ${{ inputs.digest }}
+          VERSION: ${{ inputs.version }}
+        run: uv run python -m scripts.verify_candidate --run-id "$CI_RUN" --digest "$DIGEST" --version "$VERSION"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote without rebuilding or overwriting an existing semantic tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: uv run python -m scripts.promote --version "$VERSION"
+
+  draft:
+    name: Create owner-reviewable draft release
+    needs: simulate
+    if: inputs.create_draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip install --require-hashes -r .github/requirements-bootstrap.txt
+          uv sync --locked
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-evidence
+          path: reports
+      - name: Verify the owner-created Git tag and create a draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_RUN: ${{ inputs.ci_run_id }}
+          DIGEST: ${{ inputs.digest }}
+          VERSION: ${{ inputs.version }}
+        run: uv run python -m scripts.draft_release --run-id "$CI_RUN" --digest "$DIGEST" --version "$VERSION"

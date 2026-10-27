@@ -1,0 +1,77 @@
+name: Isolated rollback demonstration
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: Newer successful CI run with staging evidence
+        required: true
+        type: string
+      candidate_digest:
+        description: Exact newer candidate digest
+        required: true
+        type: string
+      previous_run:
+        description: Older successful CI run with staging evidence
+        required: true
+        type: string
+      previous_digest:
+        description: Different previously validated image digest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rollback-demonstration
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    name: Reject candidate and restore verified image
+    if: >-
+      github.repository == 'gig0d/enterprise-cicd-pipeline' &&
+      github.ref == 'refs/heads/main' && github.actor == 'gig0d' &&
+      github.triggering_actor == 'gig0d'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip install --require-hashes -r .github/requirements-bootstrap.txt
+          uv sync --locked
+          python -m scripts.install_tool trivy
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate both records, reject the non-ready process, and recover
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+          PREVIOUS_RUN: ${{ inputs.previous_run }}
+          PREVIOUS_DIGEST: ${{ inputs.previous_digest }}
+        run: >-
+          uv run python -m scripts.rollback
+          --candidate-run "$CANDIDATE_RUN" --candidate-digest "$CANDIDATE_DIGEST"
+          --previous-run "$PREVIOUS_RUN" --previous-digest "$PREVIOUS_DIGEST"
+      - name: Preserve recovery and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rollback-evidence
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 90
