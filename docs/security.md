@@ -21,7 +21,7 @@ Synthetic fixtures in tests use `DEMO-ADVISORY-*`, not real vulnerable dependenc
 
 ## Supply-chain controls
 
-Production dependencies are exported from `uv.lock` into fully pinned, hashed `requirements.txt`. `scripts.check_repository` rejects a stale export. Docker installs only matching binary wheels with `--require-hashes`. The official Python image is pinned by manifest digest; Dependabot proposes reviewed digest, dependency, and Action updates. Every external Action reference uses an upstream-verified 40-character commit SHA. Scanner binaries use official release assets and committed SHA-256 checksums in `tools.lock.json`; checksums protect against changed downloads but are not independent publisher signatures.
+Production dependencies are exported from `uv.lock` into fully pinned, hashed `requirements.txt`. `scripts.check_repository` rejects a stale export. Docker installs only matching binary wheels with `--require-hashes`, then removes pip and its bundled bootstrap copy from the runtime image. The official Python image is pinned by manifest digest. A weekly read-only audit checks current Python advisories; dependency, base-image, scanner, and Action updates are applied manually and validated under the required owner identity. Automated version-update PRs are intentionally disabled to avoid creating development commits under bot identities. Every external Action reference uses an upstream-verified 40-character commit SHA. Scanner binaries use official release assets and committed SHA-256 checksums in `tools.lock.json`; checksums protect against changed downloads but are not independent publisher signatures.
 
 ## Attack surfaces and residual risk
 

@@ -22,6 +22,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
 WORKDIR /app
 RUN groupadd --gid 10001 app && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app
 COPY --from=dependencies /install /usr/local
+RUN python -m pip uninstall --yes pip && \
+    python -c "import ensurepip, shutil; from pathlib import Path; shutil.rmtree(Path(ensurepip.__file__).parent)"
 COPY --chown=10001:10001 src /app/src
 USER 10001:10001
 EXPOSE 8000

@@ -3,6 +3,8 @@ name: Security gates
 on:
   workflow_call:
   workflow_dispatch:
+  schedule:
+    - cron: '17 8 * * 1'
 
 permissions:
   contents: read
