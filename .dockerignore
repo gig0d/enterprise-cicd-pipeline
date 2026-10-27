@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!requirements.txt
+!src/
+!src/pipeline_demo_api/
+!src/pipeline_demo_api/*.py

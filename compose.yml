@@ -1,0 +1,21 @@
+services:
+  api:
+    image: pipeline-demo-api:local
+    build:
+      context: .
+      args:
+        VCS_REF: ${BUILD_ID:-development}
+        APP_VERSION: 0.1.0
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      APP_ENVIRONMENT: development
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1.0
+    stop_grace_period: 12s
