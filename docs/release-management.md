@@ -16,6 +16,8 @@ The production job rescans the exact image with a current vulnerability database
 
 `environment: production` allows GitHub reviewer rules to apply when configured. Without those rules, the authorization mechanism is owner-only manual dispatch; this is **not** GitHub-enforced reviewer approval. See `github-setup.md` for the observed configuration and approval setup steps. The workflow never approves its own pending deployment through the API.
 
+The owner-approved production reviewer rule and main-only source restriction were configured and read back on 2026-10-27, after the initial successful simulation. Subsequent production jobs require that review. The historical run is documented with the control that actually existed at execution time.
+
 ## Run a simulation (PowerShell)
 
 Select a successful CI run that contains both `build-record` and `staging-record`. Download its records, inspect the source and digest, and use those exact values:
@@ -36,6 +38,8 @@ Inspect the new run and `release-evidence` artifact; dispatch acceptance does no
 After reviewing the candidate and authorizing package write access for the manual promotion job, dispatch the same workflow with `-F publish_tag=true`. `ENABLE_GHCR_PUBLISH` must already be enabled. The semantic-tag job uses the production environment and revalidates the candidate. It refuses to overwrite a tag pointing at a different digest. An identical existing tag is an idempotent success.
 
 ## Git tags and GitHub draft releases
+
+Prepare a new application version by updating `pyproject.toml`, `src/pipeline_demo_api/__init__.py`, Docker/Compose version defaults, and relevant API expectations together. Run the full pipeline before selecting that version's validated image. Do not relabel an old application version as a different semantic release.
 
 Source tags must be created by the owner, never by a CI bot. After inspecting the validated source revision and effective Git identity:
 

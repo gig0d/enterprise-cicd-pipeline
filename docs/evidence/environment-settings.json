@@ -1,0 +1,41 @@
+{
+  "verified_on": "2026-10-27",
+  "environments": [
+    {
+      "name": "staging",
+      "deployment_branch_policy": {
+        "protected_branches": false,
+        "custom_branch_policies": true
+      },
+      "required_reviewers": [],
+      "prevent_self_review": null,
+      "branch_policies": [
+        {
+          "name": "main",
+          "type": "branch"
+        }
+      ],
+      "can_admins_bypass": false,
+      "updated_at": "2026-10-27T07:25:04Z"
+    },
+    {
+      "name": "production",
+      "deployment_branch_policy": {
+        "protected_branches": false,
+        "custom_branch_policies": true
+      },
+      "required_reviewers": [
+        "gig0d"
+      ],
+      "prevent_self_review": false,
+      "branch_policies": [
+        {
+          "name": "main",
+          "type": "branch"
+        }
+      ],
+      "can_admins_bypass": false,
+      "updated_at": "2026-10-27T07:25:07Z"
+    }
+  ]
+}

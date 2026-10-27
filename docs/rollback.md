@@ -16,10 +16,10 @@ Inspect `rollback-evidence/rollback-record.json`, `rejected-candidate.json`, `re
 
 ```mermaid
 flowchart LR
-  A[Validate candidate and previous records] --> B[Reject candidate on readiness timeout]
+  A[Validate candidate and previous records] --> D[Pull and rescan previous digest]
+  D --> B[Reject candidate on readiness timeout]
   B --> C[Remove failed container]
-  C --> D[Pull and rescan previous digest]
-  D --> E[Restore previous image in isolated simulation]
+  C --> E[Restore previous image in isolated simulation]
   E --> F{HTTP and shutdown checks}
   F -->|pass| G[Record recovery and clean resources]
   F -->|fail| H[Fail workflow and preserve diagnostics]
